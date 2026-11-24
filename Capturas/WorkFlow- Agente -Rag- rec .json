@@ -1,0 +1,548 @@
+{
+  "name": "TP - Asistente Técnico WhatsApp con Ollama, RAG y Manejo de Errores",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "qwen2.5:7b",
+        "options": {
+          "temperature": 0.2,
+          "numPredict": 1024
+        }
+      },
+      "id": "7ebbba70-387a-4024-b804-baab825158c0",
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        336,
+        272
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "hcbNxOfhKwujtCmM",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "Sos el asistente virtual de atención al cliente y soporte técnico de \"TechFix Computación\". Tu objetivo es responder consultas de clientes por WhatsApp sobre estado de reparaciones, stock de repuestos, precios y manuales técnicos, usando únicamente la información de tus herramientas.\n\n### REGLAS DE OPERACIÓN Y HERRAMIENTAS:\n1. **ESTADO DE REPARACIONES (Google Sheets - tickets):** \n   - Si el cliente consulta por el estado de su equipo o brinda un número de orden/ticket, utilizá la herramienta `Consulta estado de reparacion-soporte tecnico`.\n   - Si no brindó el número de orden (`id_ticket`), pedilo cordialmente antes de buscar. Nunca inventes estados ni fechas de entrega.\n\n2. **STOCK, PRECIOS Y COMPATIBILIDAD (Google Sheets - Inventario):** \n   - Si consultan por disponibilidad de repuestos (pantallas, discos, memorias RAM, fuentes), precios o costos, utilizá la herramienta `Inventario - stock disponible y precios`.\n   - Verificá siempre la columna `modelo_compatible` antes de confirmar que un repuesto le sirve al equipo del cliente.\n   - Si la columna `Stock` es `0` o está vacía, aclarale que actualmente no hay stock disponible.\n\n3. **MANUALES Y ASISTENCIA TÉCNICA (RAG - Supabase):** \n   - Si consultan por procedimientos técnicos, políticas de garantía, tiempos estimados o guías de diagnóstico, consultá la base de conocimiento vectorial (`Supabase Vector Store`).\n\n4. **DERIVACIÓN A TÉCNICO HUMANO:** \n   - Si el problema requiere revisión física urgente, no encontrás el ticket en la planilla o el cliente pide hablar con una persona, indicá claramente que derivás la consulta con un técnico humano en el taller.\n\n### TONO Y FORMATO (OPTIMIZADO PARA WHATSAPP):\n- Mantené un tono profesional, cercano y resolutivo (usando \"vos\").\n- Sé conciso y claro: usá viñetas cortas y **negritas** para resaltar datos clave (precios, estados de reparación o modelos).\n- **Regla anti-alucinación:** Si un dato no figura en ninguna herramienta, no lo supongas ni lo inventes."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        432,
+        64
+      ],
+      "id": "55a40437-fed9-4147-82c6-465a0686fe62",
+      "name": "AI Agent1",
+      "onError": "continueErrorOutput",
+      "notes": "\"Sistema en mantenimiento, derivando a un técnico\""
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "simulacionwhat",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        64
+      ],
+      "id": "e16f7f11-b039-49ce-acb1-edf36ef17053",
+      "name": "Webhook",
+      "webhookId": "263de98c-7dcb-4a9d-baeb-aaef9f24b5bd"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "{{ $json.sessionId  }}",
+        "contextWindowLength": 8
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        512,
+        288
+      ],
+      "id": "6cdd1a49-acde-4000-a1c1-23e3dda2b723",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        304,
+        688
+      ],
+      "id": "91d65254-a43d-43df-8bd4-895a214fe29d",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "hcbNxOfhKwujtCmM",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7c91e991-f0bc-4bde-9e8e-ce45fa029e21",
+              "name": "=chatInput",
+              "value": "={{ $json.body.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "8e72dc93-9462-4d72-aecd-de6cf4230916",
+              "name": "=sessionId",
+              "value": "={{ $json.body.sender }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        240,
+        64
+      ],
+      "id": "3099cf97-d57b-4480-8606-57a39e3b9a1a",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "48b926c4-01b9-48d6-8a5c-7cef3bb88515",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        736,
+        64
+      ],
+      "id": "96aee5e1-e0f4-4feb-af6c-a6baa9ee6c7b",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"respuesta\": {{ JSON.stringify($json.output) }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        -16
+      ],
+      "id": "38873925-2c2e-4b6b-974a-1bc025453339",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"No se pudo generar una respuesta\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1040,
+        128
+      ],
+      "id": "976001c8-7f97-4f26-9ffc-4ae29180e59c",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Usa Supabase para manuales/políticas.\nUsa Google Sheets (planilla con nombre Soporte _tecnico, hoja Tickets para estado de reparaciones, y usa Google Sheets (planilla con nombre Soporte _tecnico, hoja  Inventario para repuestos y precios.",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        368
+      ],
+      "id": "33110d6c-c61b-4de9-953f-25d3cc5a1a35",
+      "name": "Supabase Vector Store Consultar Ticket Reparacion",
+      "credentials": {
+        "supabaseApi": {
+          "id": "lon8TKCIrtdglFrn",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "\"Usa esta herramienta para buscar el estado de reparación, diagnóstico y costo de un cliente usando su número de ticket (id_ticket).\"",
+        "documentId": {
+          "__rl": true,
+          "value": "1W0RFZHhojn-kqP07SZxDLGli2eoyFY8fQN2fR-yH5U0",
+          "mode": "list",
+          "cachedResultName": "Soporte_Tecnico",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W0RFZHhojn-kqP07SZxDLGli2eoyFY8fQN2fR-yH5U0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "tickets ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W0RFZHhojn-kqP07SZxDLGli2eoyFY8fQN2fR-yH5U0/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "id_ticket",
+              "lookupValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('values0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        448
+      ],
+      "id": "08e12b38-9029-48c7-a46b-a4e653948933",
+      "name": "Consulta estado de reparacion-soporte tecnico",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "9m72zCNPHwrvSMAH",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Usa esta herramienta para consultar el stock disponible y precios de repuestos.",
+        "documentId": {
+          "__rl": true,
+          "value": "1W0RFZHhojn-kqP07SZxDLGli2eoyFY8fQN2fR-yH5U0",
+          "mode": "list",
+          "cachedResultName": "Soporte_Tecnico",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W0RFZHhojn-kqP07SZxDLGli2eoyFY8fQN2fR-yH5U0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 746856554,
+          "mode": "list",
+          "cachedResultName": "Inventario",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W0RFZHhojn-kqP07SZxDLGli2eoyFY8fQN2fR-yH5U0/edit#gid=746856554"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        1200,
+        448
+      ],
+      "id": "e52e3103-9ba3-4282-9985-0f10d8873642",
+      "name": "Inventario - stock disponible y precios",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "9m72zCNPHwrvSMAH",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        496
+      ],
+      "id": "ddeee014-b232-44c2-9a1d-09e6d0021ead",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "550e45c9-b0fa-4198-8093-40dc55652d01",
+              "name": "Politicas",
+              "value": "Base de Conocimiento Técnica y Políticas del Taller Este documento sirve como base de conocimientos oficial para alimentar el sistema RAG de consultas automatizadas por WhatsApp. 1. Guía de Diagnóstico de Fallas Comunes Falla: La computadora enciende pero no da video (Pantalla Negra) Causa Común: Falso contacto en las memorias RAM, estática acumulada o fallo de placa base. Solución/Procedimiento: Desconectar de la corriente, retirar la batería, limpiar los pines de la memoria RAM con una goma de borrar limpia, sopletear el slot con aire comprimido, reensamblar y probar. Si persiste, realizar desestatizado completo del equipo sosteniendo el botón de encendido por 30 segundos sin energía. Falla: El equipo está extremadamente lento y se congela Causa Común: Disco duro mecánico (HDD) con sectores dañados, falta de memoria RAM o saturación de archivos/malware. Solución/Procedimiento: Verificar estado de salud del disco. Si el estado es \"Riesgo\" o \"Malo\", se debe sugerir al cliente de forma prioritaria la migración y cambio por un Disco Sólido (SSD) junto con una reinstalación limpia de sistema operativo. Falla: La laptop se apaga sola a los pocos minutos de uso Causa Común: Sobrecalentamiento por acumulación de pelusa en el disipador o degradación térmica de la pasta refrigerante. Solución/Procedimiento: Desarmar sistema de enfriamiento, limpiar rejillas, remover pasta vieja reseca y aplicar pasta térmica de alta conductividad (ej. Artic MX-4). Verificar que el cooler gire libremente. 2. Políticas Generales de Garantía del Taller Reparaciones de Hardware: Todo cambio de componente físico (Pantallas, SSD, Memorias RAM) cuenta con una garantía escrita de 6 meses contra defectos de fábrica. • Servicios de Software: La instalación de sistemas operativos, software de ofimática y eliminación de virus cuenta con una garantía de cobertura de 15 días corridos. Quedan excluidos fallos provocados por descargas posteriores del usuario o malware adquirido postentrega. Pérdida de Garantía: La garantía quedará completamente anulada si el equipo presenta signos de manipulación interna por terceros, golpes visibles, derrame de líquidos o rotura de las fajas de seguridad colocadas por el taller. Plazo de Almacenamiento: Retirado el diagnóstico o aviso de reparación lista, el cliente dispone de un plazo máximo de 60 días para retirar su equipo. Cumplido el plazo, se aplicarán recargos por depósito. Documento de Uso Interno - Taller de Reparación Computacional - Base de Conocimiento para Agente RAG. • • •",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        496
+      ],
+      "id": "2c041ea7-8bbe-45c1-961a-ed1070ac6627",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        416,
+        512
+      ],
+      "id": "a9533454-2a49-420b-93ec-470fb9322442",
+      "name": "Supabase Vector Store",
+      "credentials": {
+        "supabaseApi": {
+          "id": "lon8TKCIrtdglFrn",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        752
+      ],
+      "id": "061f4b5d-0197-40af-82e9-390661597cc4",
+      "name": "Default Data Loader1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store Consultar Ticket Reparacion",
+            "type": "ai_embedding",
+            "index": 0
+          },
+          {
+            "node": "Supabase Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Vector Store Consultar Ticket Reparacion": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consulta estado de reparacion-soporte tecnico": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inventario - stock disponible y precios": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Supabase Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader1": {
+      "ai_document": [
+        [
+          {
+            "node": "Supabase Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2822dd4b-3067-48df-87d4-d613f1058a9c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "142fb88001a69471a3cffc6bb6b9824958725ee4ec344aed36c69d12d5c52566"
+  },
+  "nodeGroups": [],
+  "id": "lUFIqWtbQDEQtm8m",
+  "tags": []
+}
